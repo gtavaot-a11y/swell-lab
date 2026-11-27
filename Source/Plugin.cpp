@@ -234,11 +234,112 @@ private:
     int playPos = 0;
 };
 
+namespace theme
+{
+    const juce::Colour back { 0xff0d1117 }, panel { 0xff171d27 }, line { 0xff2a3342 },
+                       text { 0xffeef2f7 }, dim { 0xff8591a5 }, amber { 0xffffb020 }, coral { 0xffff5d73 };
+    inline juce::Font font (float size, bool bold = false)
+    {
+        return juce::Font (juce::FontOptions (size, bold ? juce::Font::bold : juce::Font::plain));
+    }
+}
+
+class SwellLook : public juce::LookAndFeel_V4
+{
+public:
+    SwellLook()
+    {
+        setColour (juce::Slider::textBoxTextColourId, theme::text);
+        setColour (juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
+        setColour (juce::ComboBox::textColourId, theme::text);
+        setColour (juce::PopupMenu::backgroundColourId, theme::panel);
+        setColour (juce::PopupMenu::textColourId, theme::text);
+        setColour (juce::PopupMenu::highlightedBackgroundColourId, theme::amber);
+        setColour (juce::PopupMenu::highlightedTextColourId, theme::back);
+        setColour (juce::TextButton::textColourOffId, theme::text);
+    }
+
+    void drawRotarySlider (juce::Graphics& g, int x, int y, int w, int h, float pos,
+                           float start, float end, juce::Slider& slider) override
+    {
+        const auto area = juce::Rectangle<int> (x, y, w, h).toFloat();
+        const float r = juce::jmin (area.getWidth(), area.getHeight()) * 0.5f - 5.0f;
+        const auto c = area.getCentre();
+        const float angle = start + pos * (end - start);
+        const juce::PathStrokeType stroke (5.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded);
+
+        juce::Path track, fill;
+        track.addCentredArc (c.x, c.y, r, r, 0.0f, start, end, true);
+        fill.addCentredArc (c.x, c.y, r, r, 0.0f, start, angle, true);
+        g.setColour (theme::line);
+        g.strokePath (track, stroke);
+        g.setGradientFill (juce::ColourGradient (theme::amber, c.x - r, c.y, theme::coral, c.x + r, c.y, false));
+        g.strokePath (fill, stroke);
+
+        const float body = r - 8.0f;
+        g.setGradientFill (juce::ColourGradient (juce::Colour (0xff323c4e), c.x, c.y - body,
+                                                 juce::Colour (0xff151a23), c.x, c.y + body, false));
+        g.fillEllipse (c.x - body, c.y - body, body * 2.0f, body * 2.0f);
+        g.setColour (slider.isMouseOverOrDragging() ? theme::amber : theme::text);
+        g.drawLine ({ c.getPointOnCircumference (body * 0.35f, angle),
+                      c.getPointOnCircumference (body * 0.85f, angle) }, 3.0f);
+    }
+
+    void drawButtonBackground (juce::Graphics& g, juce::Button& button, const juce::Colour&,
+                               bool over, bool down) override
+    {
+        const auto area = button.getLocalBounds().toFloat().reduced (1.0f);
+        const bool primary = (bool) button.getProperties()["primary"];
+        const float alpha = button.isEnabled() ? 1.0f : 0.4f;
+        if (primary)
+            g.setGradientFill (juce::ColourGradient (theme::amber.withAlpha (alpha), area.getX(), 0.0f,
+                                                     theme::coral.withAlpha (alpha), area.getRight(), 0.0f, false));
+        else
+            g.setColour (theme::panel.brighter (down ? 0.25f : over ? 0.12f : 0.0f).withMultipliedAlpha (alpha));
+        g.fillRoundedRectangle (area, 10.0f);
+        g.setColour (primary && over ? theme::text : theme::line);
+        g.drawRoundedRectangle (area, 10.0f, 1.0f);
+    }
+
+    juce::Font getTextButtonFont (juce::TextButton&, int) override { return theme::font (15.0f, true); }
+    juce::Font getComboBoxFont (juce::ComboBox&) override { return theme::font (14.0f); }
+
+    void drawComboBox (juce::Graphics& g, int w, int h, bool, int, int, int, int, juce::ComboBox&) override
+    {
+        const juce::Rectangle<float> area (0.5f, 0.5f, (float) w - 1.0f, (float) h - 1.0f);
+        g.setColour (theme::back);
+        g.fillRoundedRectangle (area, 7.0f);
+        g.setColour (theme::line);
+        g.drawRoundedRectangle (area, 7.0f, 1.0f);
+        juce::Path arrow;
+        const float x = (float) w - 17.0f, y = (float) h * 0.5f;
+        arrow.addTriangle (x - 4.0f, y - 2.0f, x + 4.0f, y - 2.0f, x, y + 3.0f);
+        g.setColour (theme::amber);
+        g.fillPath (arrow);
+    }
+
+    void drawToggleButton (juce::Graphics& g, juce::ToggleButton& button, bool, bool) override
+    {
+        const bool on = button.getToggleState();
+        const juce::Rectangle<float> pill (2.0f, (float) button.getHeight() * 0.5f - 11.0f, 42.0f, 22.0f);
+        g.setColour (on ? theme::amber : theme::line);
+        g.fillRoundedRectangle (pill, 11.0f);
+        g.setColour (theme::text);
+        g.fillEllipse (pill.getX() + (on ? 23.0f : 3.0f), pill.getY() + 3.0f, 16.0f, 16.0f);
+        g.setFont (theme::font (14.0f));
+        g.drawText (on ? "On" : "Off", 52, 0, button.getWidth() - 52, button.getHeight(),
+                    juce::Justification::centredLeft);
+    }
+};
+
 class DragButton : public juce::TextButton
 {
 public:
     std::function<void()> onDragStart;
-    DragButton() : juce::TextButton ("DRAG TO FL") {}
+    DragButton() : juce::TextButton ("DRAG TO FL")
+    {
+        setMouseCursor (juce::MouseCursor::DraggingHandCursor);
+    }
     void mouseDown (const juce::MouseEvent& e) override { started = false; juce::TextButton::mouseDown (e); }
     void mouseDrag (const juce::MouseEvent& e) override
     {
@@ -252,14 +353,17 @@ private:
     bool started = false;
 };
 
-class SwellEditor : public juce::AudioProcessorEditor, private juce::Timer
+// Everything is laid out at 760 x 500 and scaled to fit the window.
+class SwellPanel : public juce::Component, private juce::Timer
 {
 public:
-    explicit SwellEditor (SwellProcessor& p) : AudioProcessorEditor (p), proc (p)
+    explicit SwellPanel (SwellProcessor& p) : proc (p)
     {
         for (auto* b : { (juce::Button*) &captureButton, (juce::Button*) &playButton,
                          (juce::Button*) &previewButton, (juce::Button*) &dragButton, (juce::Button*) &lowCut })
             addAndMakeVisible (b);
+        captureButton.getProperties().set ("primary", true);
+        captureButton.setColour (juce::TextButton::textColourOffId, theme::back);
         captureButton.onClick = [this]
         {
             if (proc.state == SwellProcessor::armed || proc.state == SwellProcessor::recording) proc.finish();
@@ -275,79 +379,121 @@ public:
             if (file.existsAsFile())
                 juce::DragAndDropContainer::performExternalDragDropOfFiles ({ file.getFullPathName() }, false, this);
             else
+            {
+                ready = false;
                 message = "Could not write the WAV to your Music folder.";
+            }
         };
 
         setupBox (length, "length", lengthAttach);
         setupBox (tremRate, "rate", rateAttach);
         const char* ids[] = { "size", "tone", "width", "trem", "output" };
-        const char* names[] = { "SIZE", "TONE", "WIDTH", "TREMOLO", "OUTPUT dB" };
         for (int i = 0; i < 5; ++i)
         {
             knobs[i].setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
-            knobs[i].setTextBoxStyle (juce::Slider::TextBoxBelow, false, 70, 18);
-            knobs[i].setColour (juce::Slider::rotarySliderFillColourId, accent);
+            knobs[i].setTextBoxStyle (juce::Slider::TextBoxBelow, false, 80, 20);
             addAndMakeVisible (knobs[i]);
-            labels[i].setText (names[i], juce::dontSendNotification);
-            labels[i].setJustificationType (juce::Justification::centred);
-            addAndMakeVisible (labels[i]);
             knobAttach[i] = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (proc.params, ids[i], knobs[i]);
+            if (i < 4)
+            {
+                knobs[i].textFromValueFunction = [] (double v) { return juce::String (juce::roundToInt (v * 100.0)) + "%"; };
+                knobs[i].valueFromTextFunction = [] (const juce::String& t) { return t.getDoubleValue() / 100.0; };
+            }
+            else
+                knobs[i].textFromValueFunction = [] (double v) { return juce::String (v, 1) + " dB"; };
+            knobs[i].updateText();
             knobs[i].onValueChange = [this] { dirty = true; };
         }
         lowCutAttach = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (proc.params, "lowcut", lowCut);
-        lowCut.onStateChange = [this]
-        {
-            if (lowCut.getToggleState() != lastLowCut) { lastLowCut = lowCut.getToggleState(); dirty = true; }
-        };
         lastLowCut = lowCut.getToggleState();
-        setSize (620, 400);
-        startTimerHz (10);
+        setSize (760, 500);
+        timerCallback();
+        startTimerHz (15);
     }
 
     void paint (juce::Graphics& g) override
     {
-        g.fillAll (juce::Colour (0xff10201e));
-        g.setColour (juce::Colours::white);
-        g.setFont (24.0f);
-        g.drawText ("SWELL LAB", 20, 10, 300, 30, juce::Justification::centredLeft);
-        g.setFont (14.0f);
-        g.drawText (juce::String (proc.bpm.load(), 1) + " BPM   " + juce::String (proc.beatsPerBar.load()) + " beats/bar",
-                    300, 10, 300, 30, juce::Justification::centredRight);
-        const juce::Rectangle<int> screen (20, 50, 580, 120);
-        g.setColour (juce::Colour (0xff1b3330));
-        g.fillRoundedRectangle (screen.toFloat(), 8.0f);
-        g.setColour (accent);
+        g.fillAll (theme::back);
+
+        g.setFont (theme::font (28.0f, true));
+        g.setColour (theme::text);
+        g.drawText ("SWELL", 24, 16, 110, 32, juce::Justification::centredLeft);
+        g.setColour (theme::amber);
+        g.drawText ("LAB", 132, 16, 80, 32, juce::Justification::centredLeft);
+        g.setFont (theme::font (13.0f));
+        g.setColour (theme::dim);
+        g.drawText ("Reverse reverb swells", 24, 46, 220, 18, juce::Justification::centredLeft);
+
+        chip (g, { 548, 22, 96, 32 }, juce::String (proc.bpm.load(), 1) + " BPM");
+        chip (g, { 652, 22, 84, 32 }, juce::String (proc.beatsPerBar.load()) + " beats");
+
+        const juce::Rectangle<float> screen (24.0f, 76.0f, 712.0f, 170.0f);
+        g.setColour (theme::panel);
+        g.fillRoundedRectangle (screen, 12.0f);
+        g.setColour (theme::line);
+        g.drawRoundedRectangle (screen, 12.0f, 1.0f);
+
         const auto& buf = proc.result();
         if (ready && buf.getNumSamples() > 0)
         {
-            const int step = juce::jmax (1, buf.getNumSamples() / 560);
-            for (int x = 0; x < 560 && x * step < buf.getNumSamples(); ++x)
+            g.setGradientFill (juce::ColourGradient (theme::amber.withAlpha (0.5f), 40.0f, 0.0f,
+                                                     theme::coral, 720.0f, 0.0f, false));
+            const int total = buf.getNumSamples();
+            for (int x = 0; x < 226; ++x)
             {
-                const float m = buf.getMagnitude (0, x * step, juce::jmin (step, buf.getNumSamples() - x * step));
-                g.fillRect ((float) (30 + x), 110.0f - m * 55.0f, 1.0f, m * 110.0f + 1.0f);
+                const int from = (int) ((juce::int64) x * total / 226);
+                const int count = juce::jmax (1, (int) ((juce::int64) (x + 1) * total / 226) - from);
+                const float m = juce::jmin (1.0f, buf.getMagnitude (from, juce::jmin (count, total - from)));
+                g.fillRoundedRectangle (42.0f + (float) x * 3.0f, 161.0f - m * 60.0f, 2.0f, m * 120.0f + 2.0f, 1.0f);
             }
+            g.setFont (theme::font (12.0f));
+            g.setColour (theme::dim);
+            g.drawText (juce::String (total / proc.captureRate, 2) + " s", 40, 224, 100, 18, juce::Justification::centredLeft);
+            g.drawText ("your sound starts here >", 520, 224, 200, 18, juce::Justification::centredRight);
         }
         else
-            g.drawText (message, screen, juce::Justification::centred);
+        {
+            const bool busy = proc.state == SwellProcessor::armed || proc.state == SwellProcessor::recording;
+            g.setColour (busy ? theme::coral : theme::dim);
+            g.setFont (theme::font (17.0f, busy));
+            g.drawText (message, screen.toNearestInt(), juce::Justification::centred);
+        }
+
+        g.setColour (theme::panel);
+        g.fillRoundedRectangle (24.0f, 316.0f, 712.0f, 164.0f, 12.0f);
+        const char* names[] = { "SIZE", "TONE", "WIDTH", "TREMOLO", "OUTPUT" };
+        g.setColour (theme::dim);
+        g.setFont (theme::font (12.0f, true));
+        for (int i = 0; i < 5; ++i)
+            g.drawText (names[i], 34 + i * 112, 328, 112, 16, juce::Justification::centred);
+        g.drawText ("LENGTH", 606, 328, 112, 16, juce::Justification::centredLeft);
+        g.drawText ("TREMOLO RATE", 606, 382, 112, 16, juce::Justification::centredLeft);
+        g.drawText ("LOW CUT", 606, 434, 112, 16, juce::Justification::centredLeft);
     }
 
     void resized() override
     {
-        captureButton.setBounds (20, 182, 139, 38);
-        playButton.setBounds (167, 182, 139, 38);
-        previewButton.setBounds (314, 182, 139, 38);
-        dragButton.setBounds (461, 182, 139, 38);
+        captureButton.setBounds (24, 258, 172, 46);
+        playButton.setBounds (204, 258, 172, 46);
+        previewButton.setBounds (384, 258, 172, 46);
+        dragButton.setBounds (564, 258, 172, 46);
         for (int i = 0; i < 5; ++i)
-        {
-            labels[i].setBounds (20 + i * 116, 235, 116, 20);
-            knobs[i].setBounds (20 + i * 116, 255, 116, 90);
-        }
-        length.setBounds (30, 358, 130, 26);
-        tremRate.setBounds (378, 358, 96, 26);
-        lowCut.setBounds (190, 358, 120, 26);
+            knobs[i].setBounds (34 + i * 112, 350, 112, 118);
+        length.setBounds (606, 348, 112, 26);
+        tremRate.setBounds (606, 402, 112, 26);
+        lowCut.setBounds (606, 450, 112, 26);
     }
 
 private:
+    static void chip (juce::Graphics& g, juce::Rectangle<int> area, const juce::String& label)
+    {
+        g.setColour (theme::panel);
+        g.fillRoundedRectangle (area.toFloat(), 8.0f);
+        g.setColour (theme::text);
+        g.setFont (theme::font (14.0f, true));
+        g.drawText (label, area, juce::Justification::centred);
+    }
+
     void setupBox (juce::ComboBox& box, const char* id,
                    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>& attach)
     {
@@ -361,22 +507,25 @@ private:
     {
         ready = proc.render();
         dirty = false;
+        if (! ready) message = "Nothing usable captured. Try again.";
     }
 
     void timerCallback() override
     {
-        const int s = proc.state;
         // stop capturing after one second of audio; only the first half second is used
-        if (s == SwellProcessor::recording && proc.capturedLength() > (int) proc.captureRate)
+        if (proc.state == SwellProcessor::recording && proc.capturedLength() > (int) proc.captureRate)
             proc.finish();
         const double tempo = proc.bpm.load() * 100.0 + proc.beatsPerBar.load();
         if (std::abs (tempo - lastTempo) > 0.001) { lastTempo = tempo; dirty = true; }
+        if (lowCut.getToggleState() != lastLowCut) { lastLowCut = lowCut.getToggleState(); dirty = true; }
         if (proc.state == SwellProcessor::captured && dirty && ! juce::ModifierKeys::currentModifiers.isAnyMouseButtonDown())
             update();
+        const int s = proc.state;
         if (s == SwellProcessor::armed) message = "Waiting for sound... press play in FL";
         else if (s == SwellProcessor::recording) message = "Capturing...";
-        else if (s == SwellProcessor::idle) message = "Press CAPTURE, then play the sound";
-        captureButton.setButtonText (s == SwellProcessor::armed || s == SwellProcessor::recording ? "STOP" : "CAPTURE");
+        else if (s == SwellProcessor::idle) message = "Press CAPTURE, then play your sound";
+        const bool busy = s == SwellProcessor::armed || s == SwellProcessor::recording;
+        captureButton.setButtonText (busy ? "STOP" : "CAPTURE");
         playButton.setEnabled (ready);
         previewButton.setEnabled (ready);
         dragButton.setEnabled (ready);
@@ -384,19 +533,41 @@ private:
     }
 
     SwellProcessor& proc;
-    const juce::Colour accent { 0xff4fd1b5 };
-    juce::TextButton captureButton { "CAPTURE" }, playButton { "PLAY" }, previewButton { "PREVIEW" };
+    juce::TextButton captureButton { "CAPTURE" }, playButton { "PLAY DRY" }, previewButton { "PREVIEW SWELL" };
     DragButton dragButton;
-    juce::ToggleButton lowCut { "Low cut" };
+    juce::ToggleButton lowCut;
     juce::ComboBox length, tremRate;
     juce::Slider knobs[5];
-    juce::Label labels[5];
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> knobAttach[5];
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> lengthAttach, rateAttach;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> lowCutAttach;
-    juce::String message { "Press CAPTURE, then play the sound" };
+    juce::String message;
     bool ready = false, dirty = true, lastLowCut = false;
     double lastTempo = 0.0;
+};
+
+class SwellEditor : public juce::AudioProcessorEditor
+{
+public:
+    explicit SwellEditor (SwellProcessor& p) : AudioProcessorEditor (p), panel (p)
+    {
+        setLookAndFeel (&look);
+        addAndMakeVisible (panel);
+        panel.sendLookAndFeelChange();
+        setResizable (true, true);
+        setResizeLimits (570, 375, 1520, 1000);
+        getConstrainer()->setFixedAspectRatio (1.52);
+        setSize (760, 500);
+    }
+    ~SwellEditor() override { setLookAndFeel (nullptr); }
+    void resized() override
+    {
+        panel.setTransform (juce::AffineTransform::scale ((float) getWidth() / 760.0f));
+    }
+
+private:
+    SwellLook look;
+    SwellPanel panel;
 };
 
 juce::AudioProcessorEditor* SwellProcessor::createEditor() { return new SwellEditor (*this); }
